@@ -1,5 +1,6 @@
 apiVersion: apps/v1
 kind: Deployment
+
 metadata:
   name: {{ include "local-llm-api.fullname" . }}
   labels:
@@ -29,6 +30,16 @@ spec:
               containerPort: 8000
               protocol: TCP
 
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+
+          volumeMounts:
+            - name: vector-db
+              mountPath: /app/vector_db
+
           env:
             - name: OLLAMA_BASE_URL
               valueFrom:
@@ -52,3 +63,8 @@ spec:
               port: 8000
             initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+
+      volumes:
+        - name: vector-db
+          persistentVolumeClaim:
+            claimName: {{ include "local-llm-api.fullname" . }}-vector-db

@@ -1,8 +1,11 @@
-from pathlib import Path
+import os
 import requests
 import chromadb
+from pathlib import Path
 
-OLLAMA_EMBED_URL = "http://localhost:11434/api/embed"
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_EMBED_URL = f"{OLLAMA_BASE_URL}/api/embed"
+
 EMBED_MODEL = "nomic-embed-text"
 
 KNOWLEDGE_DIR = Path("knowledge")

@@ -1,25 +1,27 @@
 replicaCount: 1
 
-ingestion:
-  enabled: true
-
 image:
   repository: ghcr.io/sammaiah-msr/ai-devops-rag-platform
   tag: v2
   pullPolicy: IfNotPresent
 
-nameOverride: ""
-fullnameOverride: ""
-
 service:
   type: ClusterIP
   port: 8000
 
-route:
-  enabled: false
-
 ollama:
   baseUrl: "http://host.docker.internal:11434"
+
+persistence:
+  enabled: true
+  accessMode: ReadWriteOnce
+  size: 1Gi
+
+ingestion:
+  enabled: false
+
+route:
+  enabled: true
 
 resources:
   requests:
@@ -28,10 +30,6 @@ resources:
   limits:
     cpu: "1"
     memory: "1Gi"
-persistence:
-  enabled: true
-  accessMode: ReadWriteOnce
-  size: 1Gi
 
 readinessProbe:
   path: /health

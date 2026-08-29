@@ -1,0 +1,17 @@
+{{- if .Values.route.enabled }}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ include "local-llm-api.fullname" . }}
+  labels:
+    {{- include "local-llm-api.labels" . | nindent 4 }}
+spec:
+  to:
+    kind: Service
+    name: {{ include "local-llm-api.fullname" . }}
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+{{- end }}

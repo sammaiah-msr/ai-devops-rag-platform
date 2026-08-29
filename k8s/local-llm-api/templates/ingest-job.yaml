@@ -1,0 +1,51 @@
+{{- if .Values.ingestion.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "local-llm-api.fullname" . }}-ingest
+  labels:
+    {{- include "local-llm-api.labels" . | nindent 4 }}
+spec:
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        {{- include "local-llm-api.selectorLabels" . | nindent 8 }}
+        job-purpose: rag-ingestion
+    spec:
+      restartPolicy: Never
+
+      containers:
+        - name: ingest
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+          command:
+            - python
+            - ingest.py
+
+          env:
+            - name: OLLAMA_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "local-llm-api.fullname" . }}-config
+                  key: OLLAMA_BASE_URL
+
+          volumeMounts:
+            - name: vector-db
+              mountPath: /app/vector_db
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+
+      volumes:
+        - name: vector-db
+          persistentVolumeClaim:
+            claimName: {{ include "local-llm-api.fullname" . }}-vector-db
+{{- end }}
