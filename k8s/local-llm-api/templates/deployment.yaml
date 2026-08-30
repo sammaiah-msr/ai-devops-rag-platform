@@ -7,6 +7,9 @@ metadata:
     {{- include "local-llm-api.labels" . | nindent 4 }}
 
 spec:
+  strategy:
+    type: Recreate
+
   replicas: {{ .Values.replicaCount }}
 
   selector:
