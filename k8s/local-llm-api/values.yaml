@@ -17,6 +17,13 @@ service:
 
 route:
   enabled: false
+  
+ai:
+  provider: "ollama"
+
+  openai:
+    llmModel: "gpt-5.6-luna"
+    embedModel: "text-embedding-3-small"
 
 ollama:
   baseUrl: "http://host.docker.internal:11434"

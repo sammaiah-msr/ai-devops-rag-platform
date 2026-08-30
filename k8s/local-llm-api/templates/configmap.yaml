@@ -5,4 +5,7 @@ metadata:
   labels:
     {{- include "local-llm-api.labels" . | nindent 4 }}
 data:
+  AI_PROVIDER: {{ .Values.ai.provider | quote }}
+  OPENAI_LLM_MODEL: {{ .Values.ai.openai.llmModel | quote }}
+  OPENAI_EMBED_MODEL: {{ .Values.ai.openai.embedModel | quote }}
   OLLAMA_BASE_URL: {{ .Values.ollama.baseUrl | quote }}

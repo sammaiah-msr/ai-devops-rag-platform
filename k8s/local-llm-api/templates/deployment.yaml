@@ -41,11 +41,35 @@ spec:
               mountPath: /app/vector_db
 
           env:
+            - name: AI_PROVIDER
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "local-llm-api.fullname" . }}-config
+                  key: AI_PROVIDER
+
+            - name: OPENAI_LLM_MODEL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "local-llm-api.fullname" . }}-config
+                  key: OPENAI_LLM_MODEL
+
+            - name: OPENAI_EMBED_MODEL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "local-llm-api.fullname" . }}-config
+                  key: OPENAI_EMBED_MODEL
+
             - name: OLLAMA_BASE_URL
               valueFrom:
                 configMapKeyRef:
                   name: {{ include "local-llm-api.fullname" . }}-config
                   key: OLLAMA_BASE_URL
+
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openai-api-key
+                  key: OPENAI_API_KEY
 
           resources:
             {{- toYaml .Values.resources | nindent 12 }}

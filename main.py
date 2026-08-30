@@ -3,6 +3,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import requests
 import chromadb
+from openai import OpenAI
 
 app = FastAPI(
     title="Local AI DevOps Assistant",
@@ -22,11 +23,55 @@ LLM_MODEL = "llama3.2:3b"
 EMBED_MODEL = "nomic-embed-text"
 
 # -----------------------------
+# AI provider configuration
+# -----------------------------
+
+AI_PROVIDER = os.getenv("AI_PROVIDER", "ollama").lower()
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_LLM_MODEL = os.getenv(
+    "OPENAI_LLM_MODEL",
+    "gpt-5.6-luna"
+)
+OPENAI_EMBED_MODEL = os.getenv(
+    "OPENAI_EMBED_MODEL",
+    "text-embedding-3-small"
+)
+
+ACTIVE_LLM_MODEL = (
+    OPENAI_LLM_MODEL
+    if AI_PROVIDER == "openai"
+    else LLM_MODEL
+)
+
+ACTIVE_EMBED_MODEL = (
+    OPENAI_EMBED_MODEL
+    if AI_PROVIDER == "openai"
+    else EMBED_MODEL
+)
+
+openai_client = None
+
+if AI_PROVIDER == "openai":
+    if not OPENAI_API_KEY:
+        raise RuntimeError(
+            "OPENAI_API_KEY is required when AI_PROVIDER=openai"
+        )
+
+    openai_client = OpenAI(
+        api_key=OPENAI_API_KEY
+    )
+
+# -----------------------------
 # Chroma configuration
 # -----------------------------
 
 CHROMA_DB_PATH = "./vector_db"
-COLLECTION_NAME = "devops_knowledge"
+COLLECTION_NAME = (
+    "devops_knowledge_openai"
+    if AI_PROVIDER == "openai"
+    else "devops_knowledge"
+)
 
 chroma_client = chromadb.PersistentClient(
     path=CHROMA_DB_PATH
@@ -58,14 +103,31 @@ class PromptRequest(BaseModel):
 
 def create_embedding(text: str):
     """
-    Convert text into an embedding vector using Ollama.
+    Create an embedding using Ollama locally
+    or OpenAI when AI_PROVIDER=openai.
     """
 
+    if AI_PROVIDER == "openai":
+        try:
+            response = openai_client.embeddings.create(
+                model=ACTIVE_EMBED_MODEL,
+                input=text
+            )
+
+            return response.data[0].embedding
+
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Unable to create OpenAI embedding: {exc}"
+            )
+
+    # Default: Ollama
     try:
         response = requests.post(
             OLLAMA_EMBED_URL,
             json={
-                "model": EMBED_MODEL,
+                "model": ACTIVE_EMBED_MODEL,
                 "input": text
             },
             timeout=120
@@ -80,20 +142,36 @@ def create_embedding(text: str):
     except requests.RequestException as exc:
         raise HTTPException(
             status_code=503,
-            detail=f"Unable to create embedding: {exc}"
+            detail=f"Unable to create Ollama embedding: {exc}"
         )
-
 
 def generate_llm_response(prompt: str):
     """
-    Send a prompt to the local Ollama LLM.
+    Generate a response using OpenAI when AI_PROVIDER=openai,
+    otherwise use local Ollama.
     """
 
+    if AI_PROVIDER == "openai":
+        try:
+            response = openai_client.responses.create(
+                model=ACTIVE_LLM_MODEL,
+                input=prompt
+            )
+
+            return response.output_text
+
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Unable to communicate with OpenAI: {exc}"
+            )
+
+    # Default: Ollama
     try:
         response = requests.post(
             OLLAMA_GENERATE_URL,
             json={
-                "model": LLM_MODEL,
+                "model": ACTIVE_LLM_MODEL,
                 "prompt": prompt,
                 "stream": False
             },
@@ -111,8 +189,6 @@ def generate_llm_response(prompt: str):
             status_code=503,
             detail=f"Unable to communicate with Ollama: {exc}"
         )
-
-
 # -----------------------------
 # API endpoints
 # -----------------------------
@@ -122,8 +198,9 @@ def root():
     return {
         "status": "running",
         "service": "Local AI DevOps Assistant",
-        "llm_model": LLM_MODEL,
-        "embedding_model": EMBED_MODEL,
+        "provider": AI_PROVIDER,
+        "llm_model": ACTIVE_LLM_MODEL,
+        "embedding_model": ACTIVE_EMBED_MODEL,
         "rag_enabled": knowledge_collection is not None
     }
 
@@ -156,7 +233,8 @@ User Question:
 
     return {
         "mode": "direct-llm",
-        "model": LLM_MODEL,
+        "provider": AI_PROVIDER,
+        "model": ACTIVE_LLM_MODEL,
         "question": request.prompt,
         "answer": answer
     }
@@ -252,8 +330,9 @@ Respond using this structure:
 
         return {
             "mode": "rag",
-            "model": LLM_MODEL,
-            "embedding_model": EMBED_MODEL,
+            "provider": AI_PROVIDER,
+            "model": ACTIVE_LLM_MODEL,
+            "embedding_model": ACTIVE_EMBED_MODEL,
             "question": request.prompt,
             "answer": answer,
             "sources": sources,
