@@ -34,3 +34,48 @@ jobs:
         run: |
           docker push \
             ghcr.io/sammaiah-msr/ai-devops-rag-platform:${{ github.sha }}
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install OpenShift CLI
+        run: |
+          curl -LO https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable/openshift-client-linux.tar.gz
+          tar -xzf openshift-client-linux.tar.gz
+          sudo mv oc /usr/local/bin/oc
+          oc version --client
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Login to OpenShift
+        env:
+          OPENSHIFT_SERVER: ${{ secrets.OPENSHIFT_SERVER }}
+          OPENSHIFT_TOKEN: ${{ secrets.OPENSHIFT_TOKEN }}
+        run: |
+          oc login "$OPENSHIFT_SERVER" \
+            --token="$OPENSHIFT_TOKEN" \
+            --insecure-skip-tls-verify=true
+
+      - name: Deploy to OpenShift
+        env:
+          OPENSHIFT_NAMESPACE: ${{ secrets.OPENSHIFT_NAMESPACE }}
+        run: |
+          helm upgrade --install ai-devops-rag ./k8s/local-llm-api \
+            -f ./k8s/local-llm-api/values-openshift.yaml \
+            --set image.tag="${GITHUB_SHA}" \
+            --set ingestion.enabled=false \
+            -n "$OPENSHIFT_NAMESPACE"
+
+      - name: Verify rollout
+        env:
+          OPENSHIFT_NAMESPACE: ${{ secrets.OPENSHIFT_NAMESPACE }}
+        run: |
+          oc rollout status deployment/ai-devops-rag-local-llm-api \
+            -n "$OPENSHIFT_NAMESPACE" \
+            --timeout=180s
