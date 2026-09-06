@@ -79,3 +79,22 @@ jobs:
           oc rollout status deployment/ai-devops-rag-local-llm-api \
             -n "$OPENSHIFT_NAMESPACE" \
             --timeout=180s
+
+      - name: Verify public health endpoint
+        env:
+          OPENSHIFT_NAMESPACE: ${{ secrets.OPENSHIFT_NAMESPACE }}
+        run: |
+          ROUTE=$(oc get route ai-devops-rag-local-llm-api \
+            -n "$OPENSHIFT_NAMESPACE" \
+            -o jsonpath='{.spec.host}')
+
+          echo "Testing application health..."
+
+          curl --fail \
+            --retry 5 \
+            --retry-delay 5 \
+            --retry-all-errors \
+            "https://${ROUTE}/health"
+
+          echo
+          echo "Application health check passed"
