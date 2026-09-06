@@ -17,6 +17,9 @@ service:
 
 route:
   enabled: false
+
+monitoring:
+  enabled: false
   
 ai:
   provider: "ollama"

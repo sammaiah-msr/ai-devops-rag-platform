@@ -4,11 +4,26 @@ from pydantic import BaseModel
 import requests
 import chromadb
 from openai import OpenAI
+from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
+from fastapi.responses import Response
+import time
 
 app = FastAPI(
     title="Local AI DevOps Assistant",
     description="FastAPI service using Ollama, local LLM, and RAG",
     version="2.0"
+)
+
+REQUEST_COUNT = Counter(
+    "ai_platform_requests_total",
+    "Total number of API requests",
+    ["endpoint", "method", "status"]
+)
+
+REQUEST_LATENCY = Histogram(
+    "ai_platform_request_latency_seconds",
+    "Request latency in seconds",
+    ["endpoint"]
 )
 
 # -----------------------------
@@ -217,8 +232,9 @@ def ask_llm(request: PromptRequest):
     """
     Direct LLM call without RAG.
     """
-
-    prompt = f"""
+    start_time = time.time()
+    try:
+        prompt = f"""
 You are an experienced Kubernetes, OpenShift, DevOps,
 and AI Infrastructure engineer.
 
@@ -229,16 +245,42 @@ User Question:
 {request.prompt}
 """
 
-    answer = generate_llm_response(prompt)
+        answer = generate_llm_response(prompt)
 
-    return {
-        "mode": "direct-llm",
-        "provider": AI_PROVIDER,
-        "model": ACTIVE_LLM_MODEL,
-        "question": request.prompt,
-        "answer": answer
-    }
+        REQUEST_COUNT.labels(
+            endpoint="/ask",
+            method="POST",
+            status="200"
+        ).inc()
 
+        return {
+            "mode": "direct-llm",
+            "provider": AI_PROVIDER,
+            "model": ACTIVE_LLM_MODEL,
+            "question": request.prompt,
+            "answer": answer
+        }
+    except Exception:
+        REQUEST_COUNT.labels(
+            endpoint="/ask",
+            method="POST",
+            status="500"
+        ).inc()
+        raise
+
+    finally:
+        REQUEST_LATENCY.labels(
+            endpoint="/ask"
+        ).observe(
+            time.time() - start_time
+        )
+
+@app.get("/metrics")
+def metrics():
+    return Response(
+        content=generate_latest(),
+        media_type=CONTENT_TYPE_LATEST
+    )
 
 @app.post("/rag")
 def rag_question(request: PromptRequest):
@@ -247,17 +289,18 @@ def rag_question(request: PromptRequest):
     Question -> embedding -> Chroma -> retrieved context
     -> Ollama -> grounded answer.
     """
-
-    if knowledge_collection is None:
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                "RAG knowledge collection is not available. "
-                "Run ingest.py first."
-            )
-        )
+    start_time = time.time()
 
     try:
+        if knowledge_collection is None:
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "RAG knowledge collection is not available. "
+                    "Run ingest.py first."
+                )
+            )
+
         # Create embedding for the user's question
         question_embedding = create_embedding(
             request.prompt
@@ -328,6 +371,12 @@ Respond using this structure:
             }
         )
 
+        REQUEST_COUNT.labels(
+            endpoint="/rag",
+            method="POST",
+            status="200"
+        ).inc()
+
         return {
             "mode": "rag",
             "provider": AI_PROVIDER,
@@ -339,11 +388,24 @@ Respond using this structure:
             "retrieved_chunks": len(documents)
         }
 
-    except HTTPException:
+    except HTTPException as exc:
+        REQUEST_COUNT.labels(
+            endpoint="/rag",
+            method="POST",
+            status=str(exc.status_code)
+        ).inc()
         raise
 
     except Exception as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"RAG processing failed: {exc}"
+        REQUEST_COUNT.labels(
+            endpoint="/rag",
+            method="POST",
+            status="500"
+        ).inc()
+        raise 
+    finally:
+        REQUEST_LATENCY.labels(
+            endpoint="/rag"
+        ).observe(
+            time.time() - start_time
         )

@@ -1,0 +1,16 @@
+{{- if .Values.monitoring.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "local-llm-api.fullname" . }}
+  labels:
+    {{- include "local-llm-api.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "local-llm-api.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+{{- end }}

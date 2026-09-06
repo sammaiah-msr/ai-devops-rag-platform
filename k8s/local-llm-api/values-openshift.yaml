@@ -30,6 +30,9 @@ ingestion:
 route:
   enabled: true
 
+monitoring:
+  enabled: true
+
 resources:
   requests:
     cpu: "250m"
