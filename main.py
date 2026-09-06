@@ -260,6 +260,15 @@ User Question:
             "question": request.prompt,
             "answer": answer
         }
+    except HTTPException as exc:
+        # Preserve actual HTTP status such as 503
+        REQUEST_COUNT.labels(
+            endpoint="/ask",
+            method="POST",
+            status=str(exc.status_code)
+        ).inc()
+        raise
+
     except Exception:
         REQUEST_COUNT.labels(
             endpoint="/ask",
